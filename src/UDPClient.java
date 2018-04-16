@@ -9,7 +9,7 @@ class UDPClient
         Properties p = new Properties();
         FileInputStream in = new FileInputStream("src/propriedades.properties");
         p.load(in);
-        
+        //teste
         Scanner s = new Scanner(System.in);
         DatagramSocket clientSocket = new DatagramSocket();
         InetAddress IPAddress = InetAddress.getByName(p.getProperty("ip_server"));
