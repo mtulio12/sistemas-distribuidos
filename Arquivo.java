@@ -13,7 +13,7 @@ public class Arquivo {
 //            BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter("src/log.txt"));
 //            bufferedWriter.append(linha+"\n");
 //            bufferedWriter.close();
-              FileOutputStream file = new FileOutputStream(new File("C:/Users/pbessa/Documents/NetBeansProjects/sistemas-distribuidos/src/log.txt"),true);
+              FileOutputStream file = new FileOutputStream(new File("src/log.txt"),true);
               linha = linha + "\n";
               byte[] contentInBytes = linha.getBytes();
               file.write(contentInBytes);

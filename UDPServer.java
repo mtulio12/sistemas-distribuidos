@@ -20,39 +20,30 @@ class UDPServer {
     static DatagramSocket serverSocket;
     static byte[] receiveData = new byte[1400];
     static byte[] sendData = new byte[1400];
-    /*
-        Quando salvar o log? Todas as requisições ou só as não atendidas?
-        Execução das Threads? Como fazer?
-        Manipular BigInteger? Converter?
-        Quando e como processar as requisições?
-        Como processar as respostas no cliente?
-    */
+    
     public static void main(String args[]) throws SocketException, IOException{
         Properties p = new Properties();
         FileInputStream inputStream = new FileInputStream("src/propriedades.properties");
         p.load(inputStream);
         serverSocket = new DatagramSocket(Integer.parseInt(p.getProperty("porta_server")));
-        
-        //Recuperar Requisições
-        //getLog();
+        getLog();
         System.out.println("Numero de requisições recuperadas>> "+requisicoes.size());
-        
+        processamento();
         while(true){
-            //Recebe os pacotes
-            DatagramPacket receivePacket = receive();
+            DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+            serverSocket.receive(receivePacket);
             
-            //Adicionar Thread para colocar em uma fila
+            //Thread para colocar em uma fila de requisições
             Thread t = new Thread();
-            
             requisicoes.offer(receivePacket);
             System.out.println("Requisição adicionada, quantidade atual >> "+requisicoes.size());
-                        
+            
             //Thread consumindo da fila de requisições e logando em disco
             disco.add(requisicoes.peek());
             //setLog(receivePacket);
-
+            
             //Thread para processamento
-            processamento.add(requisicoes.poll());
+            processamento.add(requisicoes.poll()); 
             processamento();
         }
     }
@@ -75,54 +66,66 @@ class UDPServer {
 
     //Pego os dados da fila de 'processamento' e envio as respostas
     static void processamento() throws IOException{
-        while(processamento.size() > 0){
-            System.out.println("Processamento>> "+processamento.size());
-            DatagramPacket receivePacket = processamento.poll();
-        
-            System.out.println("Requisição atendida, quantidade atual>> "+requisicoes.size());
-            String sentence = new String(receivePacket.getData(), 0, receivePacket.getLength());
-            BigInteger bigInteger;
-            DatagramPacket datagramPacket;
-            switch( sentence ){
+        while(true){
+            DatagramPacket receivePacket = requisicoes.poll();
+            if(receivePacket != null){
+                System.out.println("Requisição atendida, quantidade atual>> "+requisicoes.size());
+            }else{
+                System.out.println("Não há mais requisições>> "+requisicoes.size());
+                break;
+            }
+            String request = new String(receivePacket.getData(), 0, receivePacket.getLength());
+
+            DatagramPacket sendPacket;
+            String dados[] = request.split(" ");
+            switch( dados[0] ){
               case "insert":
-                  send(receivePacket, "Digite o indice...");
-                  datagramPacket = receive();
-                  bigInteger = new BigInteger(datagramPacket.getData());
-                  send(datagramPacket, "Digite o dado...");
-                  datagramPacket = receive();
-                  String insertData = new String(datagramPacket.getData(), 0, datagramPacket.getLength());
-                  insert(bigInteger, insertData);
-                  send(datagramPacket, "Inserido com sucesso!");
+                  BigInteger chave = new BigInteger(dados[1]);
+                  String valor = dados[2];
+                  insert(chave, valor);
+                  InetAddress IPAddress = receivePacket.getAddress();
+                  int port = receivePacket.getPort();
+                  sendData = "inserido com sucesso!!".getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
               case "delete":
-                  send(receivePacket, "Digite o indice...");
-                  datagramPacket = receive();
-                  bigInteger = new BigInteger(datagramPacket.getData());
-                  remove(bigInteger);
-                  send(datagramPacket, "Removido com sucesso!");
+                  remove(new BigInteger(dados[1]));
+                  IPAddress = receivePacket.getAddress();
+                  port = receivePacket.getPort();
+                  sendData = "Removido com sucesso!!".getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
               case "update":
-                  send(receivePacket, "Digite o indice...");
-                  datagramPacket = receive();
-                  bigInteger = new BigInteger(datagramPacket.getData());
-                  send(datagramPacket, "Digite o dado...");
-                  datagramPacket = receive();
-                  String updateData = new String(datagramPacket.getData(), 0, datagramPacket.getLength());
-                  update(bigInteger, updateData);
-                  send(datagramPacket, "Atualizado com sucesso!");
+                  update(new BigInteger(dados[1]), dados[2]);
+                  IPAddress = receivePacket.getAddress();
+                  port = receivePacket.getPort();
+                  sendData = "Atualizado com sucesso!!".getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
               case "select":
-                  send(receivePacket, "Digite o indice...");
-                  datagramPacket = receive();
-                  bigInteger = new BigInteger(datagramPacket.getData());
-                  //String dados = select(bigInteger);
-                  send(datagramPacket, "ERRO");
+                  String retorno = select(new BigInteger(dados[1]));
+                  IPAddress = receivePacket.getAddress();
+                  port = receivePacket.getPort();
+                  sendData = retorno.getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
                case "list":
-                  send(receivePacket, list());
+                  IPAddress = receivePacket.getAddress();
+                  port = receivePacket.getPort();
+                  sendData = list().getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
               default:
-                  send(receivePacket, "Comando não reconhecido... ");
+                  IPAddress = receivePacket.getAddress();
+                  port = receivePacket.getPort();
+                  sendData = "Comando não reconhecido".getBytes();
+                  sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+                  serverSocket.send(sendPacket);
                   break;
               }
         }
@@ -165,20 +168,35 @@ class UDPServer {
 
     //Atualiza objeto no HashMap
     static void update(BigInteger bigInteger, String s){
-        System.out.println("Valor atualizado no HashMap>> "+map.get(bigInteger));
-        map.replace(bigInteger, s);
+        Set<BigInteger> set = map.keySet();
+        for(BigInteger chave: set){
+            if(chave.compareTo(bigInteger)==1){
+                map.put(chave,s);
+            }
+        }
     }
     
     //Remove objeto no HashMap
     static void remove(BigInteger bigInteger){
-        System.out.println("Valor removido no HashMap>> "+map.get(bigInteger));
-        map.remove(bigInteger);
+        Set<BigInteger> set = map.keySet();
+        for(BigInteger chave: set){
+            if(chave.compareTo(bigInteger)==1){
+                map.remove(chave);
+            }
+        }
     }
 
     //Seleciona objeto do HashMap
     static String select(BigInteger bigInteger){
-        System.out.println("Valor pesquisado no HashMap>> "+map.get(bigInteger));
-        return map.get(bigInteger);
+        Set<BigInteger> set = map.keySet();
+        String retorno = "";
+        for(BigInteger chave: set){
+            if(chave.compareTo(bigInteger)==1){
+                retorno = map.get(chave) +"\n";
+            }
+        }
+        System.out.println("Lista de valores do HashMap>>\n"+retorno);
+        return retorno;
     }
 
     //Lista objetos do HashMap
